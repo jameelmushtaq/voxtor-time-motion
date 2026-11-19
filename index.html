@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AVT Time and Motion Recorder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: one narrow column, thumb-sized controls, the running clock always on top. */
+:root{
+  --bg:#f3f5f7; --surface:#ffffff; --ink:#16212b; --muted:#5b6b78; --line:#d5dce2;
+  --accent:#0b6e7a; --accent-ink:#ffffff;
+  --care:#0b6e7a; --doc:#3d4fb8; --avt:#7a3fa8; --comp:#4a5b68; --other:#77838d;
+  --warn:#b25e00; --warn-bg:#fff1dc; --bad:#b3261e; --good:#1c7c45;
+  --display:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#10171d; --surface:#19232b; --ink:#e8eef2; --muted:#9aa9b5; --line:#2e3c47;
+    --accent:#3fb6c4; --accent-ink:#06262b;
+    --care:#3fb6c4; --doc:#8c9bff; --avt:#c690ee; --comp:#9fb0bd; --other:#8795a0;
+    --warn:#ffb454; --warn-bg:#3a2a10; --bad:#ff8a80; --good:#6fd39a;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10171d; --surface:#19232b; --ink:#e8eef2; --muted:#9aa9b5; --line:#2e3c47;
+  --accent:#3fb6c4; --accent-ink:#06262b;
+  --care:#3fb6c4; --doc:#8c9bff; --avt:#c690ee; --comp:#9fb0bd; --other:#8795a0;
+  --warn:#ffb454; --warn-bg:#3a2a10; --bad:#ff8a80; --good:#6fd39a;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.45}
+#app{max-width:640px;margin:0 auto;padding:16px 16px 24px;display:flex;flex-direction:column;gap:16px}
+h1{font-size:20px;margin:0;font-weight:600;text-wrap:balance}
+h2{font-size:15px;margin:0;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+p{margin:0}
+.muted{color:var(--muted);font-size:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:12px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.row > *{flex:1 1 140px}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.tile b{display:block;font-family:var(--display);font-size:26px;font-variant-numeric:tabular-nums}
+.tile span{font-size:12.5px;color:var(--muted)}
+label{display:flex;flex-direction:column;gap:4px;font-size:13.5px;color:var(--muted);font-weight:500}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;min-height:44px;width:100%}
+textarea{min-height:70px}
+input[type=range]{padding:0;min-height:36px;accent-color:var(--accent)}
+button{font:inherit;font-weight:600;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);min-height:48px;padding:10px 14px;cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button.danger{color:var(--bad);border-color:var(--bad)}
+button.small{min-height:36px;padding:4px 10px;font-size:13.5px;font-weight:500}
+.pill{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;border:1px solid currentColor}
+.pill.avt{color:var(--avt)} .pill.baseline{color:var(--comp)} .pill.practice{color:var(--warn)}
+.clock{font-family:var(--display);font-size:44px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1}
+.now{font-size:15px;font-weight:600}
+.now small{font-family:var(--display);font-weight:500;color:var(--muted);margin-left:6px}
+.acts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.act{min-height:130px;text-align:left;border-left:6px solid var(--c);font-weight:600;line-height:1.2;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;gap:6px}
+.act b{font-family:var(--display);font-size:34px;font-variant-numeric:tabular-nums}
+.act small{font-weight:500;font-size:13px}
+.acts.one{grid-template-columns:1fr}
+button.tall{min-height:96px;font-size:18px}
+button:disabled{opacity:.5;cursor:default}
+.act.on{background:var(--c);color:var(--surface);border-color:var(--c)}
+.act[data-g=care]{--c:var(--care)} .act[data-g=doc]{--c:var(--doc)} .act[data-g=avt]{--c:var(--avt)}
+.act[data-g=comp]{--c:var(--comp)} .act[data-g=other]{--c:var(--other)}
+.hold{border-style:dashed}
+.held{border-color:var(--accent)}
+.interrupt b{font-family:var(--display);font-variant-numeric:tabular-nums}
+.interrupt{background:var(--warn-bg);border-color:var(--warn);color:var(--warn);min-height:60px}
+.interrupt.on{background:var(--warn);color:var(--surface)}
+.toggle.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.banner{background:var(--warn-bg);color:var(--warn);border:1px solid var(--warn);border-radius:10px;padding:10px 12px;font-size:14px;font-weight:500}
+.list{display:flex;flex-direction:column}
+.item{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:10px 0;border-top:1px solid var(--line);font-size:14px}
+.item:first-child{border-top:0}
+.item .id{font-family:var(--display);font-size:13px}
+.q{display:flex;flex-direction:column;gap:6px;padding:10px 0;border-top:1px solid var(--line)}
+.q:first-of-type{border-top:0}
+.q .ends{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
+.likert{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.likert label{flex-direction:column;align-items:center;border:1px solid var(--line);border-radius:8px;padding:6px 0;color:var(--ink)}
+.likert input{min-height:auto;width:auto}
+.qr{background:#fff;padding:10px;border-radius:8px;align-self:center}
+.opts{display:flex;flex-direction:column;gap:6px}
+.opts label{flex-direction:row;align-items:center;gap:12px;border:1px solid var(--line);border-radius:8px;padding:10px 12px;min-height:48px;color:var(--ink);font-size:16px;font-weight:400;cursor:pointer}
+.opts input{min-height:auto;width:22px;height:22px;flex:none;accent-color:var(--accent)}
+.opts label:has(input:checked){border-color:var(--accent);background:var(--bg);font-weight:600}
+.pq b{font-size:17px;font-weight:600;color:var(--ink)}
+.staff{border-style:dashed}
+details summary{cursor:pointer;font-weight:600}
+details[open] summary{margin-bottom:12px}
+.msg{font-size:14px;font-weight:500}
+.foot{max-width:640px;margin:0 auto;padding:0 16px 24px;font-size:12.5px;color:var(--muted);text-align:center}
+.msg.ok{color:var(--good)} .msg.err{color:var(--bad)}
+@media (max-width:400px){.tiles{grid-template-columns:1fr 1fr}.clock{font-size:38px}}
+@media (prefers-reduced-motion:no-preference){button{transition:background .12s}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<footer class="foot">AVT Time and Motion Recorder · Version 1.4 (19 Nov 2026) · Dr Jameel Mushtaq</footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+const KEY='avt-tm-v1';
+const LABEL={doc:'Documentation',setup:'AVT set-up',interrupt:'Interruption',hold:'Paused (patient out of the room)'};
+const ERR_TYPES=['Hallucination (fabricated content)','Omission','Wrong laterality','Wrong drug, dose or number','Misattribution (who said what)','Other'];
+const TLX=[
+  ['Mental demand','How mentally demanding was the documentation?','Very low','Very high'],
+  ['Physical demand','How physically demanding was the documentation?','Very low','Very high'],
+  ['Temporal demand','How hurried or rushed was the pace of documentation?','Very low','Very high'],
+  ['Performance','How successful were you in completing your documentation?','Perfect','Failure'],
+  ['Effort','How hard did you have to work to complete your documentation?','Very low','Very high'],
+  ['Frustration','How insecure, discouraged, irritated or stressed were you?','Very low','Very high']
+];
+const SUS=[
+  'I think that I would like to use the AVT tool frequently.',
+  'I found the AVT tool unnecessarily complex.',
+  'I thought the AVT tool was easy to use.',
+  'I think that I would need the support of a technical person to be able to use the AVT tool.',
+  'I found the various functions in the AVT tool were well integrated.',
+  'I thought there was too much inconsistency in the AVT tool.',
+  'I would imagine that most people would learn to use the AVT tool very quickly.',
+  'I found the AVT tool very cumbersome to use.',
+  'I felt very confident using the AVT tool.',
+  'I needed to learn a lot of things before I could get going with the AVT tool.'
+];
+
+let S={settings:{observer:'',site:'',qrBaseline:'',qrAvt:''},encounters:[],surveys:[],active:null,seq:0,last:{}};
+let storeOk=true;
+try{const r=localStorage.getItem(KEY); if(r){const p=JSON.parse(r); S=Object.assign(S,p); S.settings=Object.assign({observer:'',site:'',qrBaseline:'',qrAvt:''},p.settings||{});}}catch(e){storeOk=false}
+const DEF_BASE='https://forms.cloud.microsoft/Pages/ResponsePage.aspx?id=slTDN7CF9UeyIge0jXdO4wIZsZiQSPhJmKqi2v5AiDVUMDVLMEo5WUk2VFc1M1AwVlRZTklFNVBVVi4u&rf942d7176fec4340ae72f09aa2851bc0=ENCOUNTER';
+const DEF_AVT='https://forms.cloud.microsoft/Pages/ResponsePage.aspx?id=slTDN7CF9UeyIge0jXdO4wIZsZiQSPhJmKqi2v5AiDVUOFMzVkVFR0pFQkpBUkRZWklOVDBVTUNKNC4u&rf942d7176fec4340ae72f09aa2851bc0=ENCOUNTER';
+S.held=S.held||[];
+if(!S.settings.linksV){if(!S.settings.surveyBase)S.settings.surveyBase=DEF_BASE;if(!S.settings.surveyAvt)S.settings.surveyAvt=DEF_AVT;S.settings.linksV=1}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S));storeOk=true}catch(e){storeOk=false}}
+let view=S.active?(S.active.end?'outcome':'timer'):'home';
+let flash=null, armed=null, dl=null;
+if(window.claude&&window.claude.use){window.claude.use('downloads').then(d=>{dl=d; if(view==='home')render();}).catch(()=>{});}
+
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=s=>{s=Math.max(0,Math.round(s));const m=Math.floor(s/60);return m+':'+String(s%60).padStart(2,'0')};
+const r1=x=>Math.round(x*10)/10;
+const pad=n=>String(n).padStart(2,'0');
+const sel=(id,opts,val)=>`<select id="${id}">${opts.map(o=>`<option${o===val?' selected':''}>${esc(o)}</option>`).join('')}</select>`;
+const ov=(s,e,a,b)=>Math.max(0,Math.min(e,b)-Math.max(s,a))/1000;
+
+function metrics(en){
+  const end=en.end||Date.now(), pl=en.patientLeft||end, ints=en.ints||[], holds=en.holds||[];
+  let doc=0,setup=0,docPre=0,docPost=0,docN=0,intS=0,intPre=0,intDoc=0;
+  for(const g of en.segs){
+    const e=g.e||end, d=(e-g.s)/1000;
+    if(g.a==='doc'){doc+=d;docN++;docPre+=ov(g.s,e,en.start,pl);docPost+=ov(g.s,e,pl,end)}
+    else if(g.a==='setup')setup+=d;
+  }
+  for(const x of ints){const e=x.e||end;intS+=(e-x.s)/1000;intPre+=ov(x.s,e,en.start,pl);if(x.resume==='doc'&&x.e)intDoc++}
+  let holdS=0,holdPre=0;
+  for(const x of holds){const e=x.e||end;holdS+=(e-x.s)/1000;holdPre+=ov(x.s,e,en.start,pl)}
+  const total=(end-en.start)/1000, consult=Math.max(0,(pl-en.start)/1000-intPre-holdPre);
+  return {total,net:total-intS-holdS,holdS,holdN:holds.length,consult,doc,setup,docIncl:doc+setup,docPre,docPost,intS,intN:ints.length,
+    pauses:Math.max(0,docN-1-intDoc),docPct:consult?docPre/consult*100:0};
+}
+const interrupted=en=>{const i=en.ints||[];return i.length&&!i[i.length-1].e?i[i.length-1]:null};
+
+/* ---------- views ---------- */
+function render(){
+  const a=$('app');
+  a.innerHTML=({home:vHome,setup:vSetup,timer:vTimer,outcome:vOutcome,survey:vSurvey,psurvey:vPSurvey,psdone:vPSDone})[view]();
+  if(view==='psurvey')drawQR();
+  window.scrollTo(0,0);
+}
+function vHome(){
+  const real=S.encounters.filter(e=>!e.practice);
+  const nb=real.filter(e=>e.arm==='baseline').length, na=real.filter(e=>e.arm==='avt'&&!e.declined).length;
+  const cb=new Set(real.filter(e=>e.arm==='baseline').map(e=>e.clinician.toLowerCase())), paired=[...new Set(real.filter(e=>e.arm==='avt').map(e=>e.clinician.toLowerCase()))].filter(c=>cb.has(c)).length;
+  const st=S.settings;
+  const rows=S.encounters.slice().reverse().map(e=>{const m=metrics(e);return `<div class="item"><div><span class="id">${esc(e.id)}</span> <span class="pill ${e.arm}">${e.arm==='avt'?(e.declined?'AVT declined':'AVT'):'Baseline'}</span>${e.practice?' <span class="pill practice">Practice</span>':''}<br><span class="muted">${esc(e.clinician)} · ${esc(e.setting)} · documentation ${fmt(m.doc)}${e.arm==='avt'?', set-up '+fmt(m.setup):''} · consultation ${fmt(m.consult)}${e.errors.length?' · '+e.errors.length+' output error'+(e.errors.length>1?'s':''):''}</span></div><button class="small danger" data-do="del" data-id="${esc(e.id)}">${armed==='del'+e.id?'Tap again':'Delete'}</button></div>`}).join('');
+  return `
+  <h1>AVT Time and Motion Recorder</h1>
+  ${storeOk?'':'<div class="banner">This browser is not saving data. Export after every encounter, or open the page in a different browser.</div>'}
+  ${flash?`<p class="msg ${flash.ok?'ok':'err'}">${esc(flash.t)}</p>`:''}
+  <div class="tiles">
+    <div class="tile"><b>${nb}</b><span>Baseline encounters</span></div>
+    <div class="tile"><b>${na}</b><span>AVT encounters (AVT used)</span></div>
+    <div class="tile"><b>${paired}</b><span>Clinicians in both arms</span></div>
+  </div>
+  ${heldList()}
+  <button class="primary" data-do="new">Start a new encounter</button>
+  <div class="row">
+    <button data-do="survey">Clinician questionnaire</button>
+    <button data-do="export">Save spreadsheet (.xlsx)</button>
+  </div>
+  <p class="muted">Data is stored only in this browser on this device. Save the spreadsheet at the end of every session. The hospital number is the only patient identifier to record. Never enter patient names or dates of birth. After emailing an export, delete the data from this device under Settings.</p>
+  <div class="card"><h2>Recorded encounters</h2>
+    <div class="list">${rows||'<p class="muted">No encounters yet. Run one in practice mode first to learn the buttons.</p>'}</div>
+    ${S.surveys.length?`<p class="muted">${S.surveys.length} clinician questionnaire${S.surveys.length>1?'s':''} recorded.</p>`:''}
+  </div>
+  <details class="card"><summary>Settings and backup</summary>
+    <label>Observer initials<input id="s_obs" value="${esc(st.observer)}" maxlength="4" autocapitalize="characters"></label>
+    <label>Patient survey link, standard version<input id="s_qb" value="${esc(st.surveyBase||'')}" placeholder="https://..." inputmode="url"></label>
+    <label>Patient survey link, AVT version<input id="s_qa" value="${esc(st.surveyAvt||'')}" placeholder="https://..." inputmode="url"></label>
+    <p class="muted">These are set to the Moorfields pilot surveys (Microsoft Forms), so the Patient survey screen shows a QR code patients can scan with their own phone. Another site can paste its own links here, or clear both boxes to use only the built-in survey. If a link contains the word ENCOUNTER (for example from a pre-filled Microsoft Forms link), it is replaced with each encounter's ID so answers can be matched to the timing data.</p>
+    <button data-do="saveSettings">Save settings</button>
+    <button data-do="copyBackup">Copy a full backup to the clipboard</button>
+    <label>Restore from a backup (paste it here)<textarea id="s_restore"></textarea></label>
+    <button data-do="restore">Add backup data to this device</button>
+    <button class="danger" data-do="wipe">${armed==='wipe'?'Tap again to delete everything on this device':'Delete all data on this device'}</button>
+  </details>`;
+}
+function vSetup(){
+  const L=S.last||{}, st=S.settings;
+  return `
+  <h1>New encounter</h1>
+  ${flash?`<p class="msg ${flash.ok?'ok':'err'}">${esc(flash.t)}</p>`:''}
+  <div class="card">
+    <div class="row">
+      <label>Arm (AVT or no AVT)${sel('f_arm',['Baseline (no AVT)','AVT'],L.arm==='avt'?'AVT':'Baseline (no AVT)')}</label>
+      <label>Setting${sel('f_setting',['ED','Clinic'],L.setting||'ED')}</label>
+    </div>
+    <label>Clinic or subspecialty<input id="f_clinic" value="${esc(L.clinic||'')}" placeholder="e.g. Adnexal, Low vision"></label>
+    <div class="row">
+      <label>Clinician name<input id="f_clin" list="clinlist" value="${esc(L.clinician||'')}" placeholder="First and last name" autocapitalize="words">${clinList()}</label>
+      <label>Grade${sel('f_grade',['Consultant','Fellow','Registrar (ST3+)','SHO (ST1-2)','Optometrist','Nurse practitioner','Other'],L.grade||'Registrar (ST3+)')}</label>
+    </div>
+    <div class="row">
+      <label>Visit type${sel('f_visit',['New','Follow-up','Not applicable'],'New')}</label>
+      <label>Observer initials<input id="f_obs" value="${esc(st.observer)}" maxlength="4" autocapitalize="characters"></label>
+    </div>
+    <div class="row">
+      <label>Interpreter${sel('f_interp',['No','Yes'],'No')}</label>
+      <label>Companion present${sel('f_comp',['No','Yes'],'No')}</label>
+    </div>
+    <div class="row">
+      <label>Clinician's prior AVT consultations${sel('f_prior',['Not applicable','0','1-5','6-20','More than 20'],L.prior||'Not applicable')}</label>
+    </div>
+    <label>Paired observation ID (only if a second observer is timing the same encounter)<input id="f_pair"></label>
+    <label>Patient hospital number (required)<input id="f_hosp" autocomplete="off" autocapitalize="characters" required></label>
+    <label>Mode${sel('f_practice',['Real data','Practice (left out of the spreadsheet)'],'Real data')}</label>
+    <p class="msg err" id="f_err"></p>
+    <button class="primary" data-do="begin">Go to timer</button>
+    <button data-do="home">Cancel</button>
+  </div>
+  ${heldList()}`;
+}
+function clinList(){
+  const seen=new Map(); S.encounters.concat(S.surveys).forEach(x=>{if(x.clinician)seen.set(x.clinician.toLowerCase(),x.clinician)});
+  return `<datalist id="clinlist">${[...seen.values()].sort().map(n=>`<option value="${esc(n)}"></option>`).join('')}</datalist>`;
+}
+const cleanName=s=>s.trim().replace(/\s+/g,' ');
+function heldList(){
+  if(!S.held.length)return '';
+  return `<div class="card held"><h2>Paused patients (${S.held.length})</h2>
+    <p class="muted">Tap Resume when the patient comes back in.${S.active&&S.active.start&&!S.active.end?' The current patient will be paused.':''}</p>
+    <div class="list">${S.held.map(e=>{const x=e.holds[e.holds.length-1];return `<div class="item"><div><span class="id">${esc(e.id)}</span> <span class="pill ${e.arm}">${e.arm==='avt'?(e.declined?'AVT declined':'AVT'):'Baseline'}</span><br><span class="muted">${esc(e.clinician)}${e.hospitalNo?' · '+esc(e.hospitalNo):''} · out for ${fmt((Date.now()-x.s)/1000)}</span></div><button class="small primary" data-do="resume" data-id="${esc(e.id)}">Resume</button></div>`}).join('')}</div></div>`;
+}
+function cur(){const g=S.active.segs;return g.length?g[g.length-1]:null}
+function running(){const c=cur();return c&&!c.e?c.a:null}
+function vTimer(){
+  const en=S.active, avt=en.arm==='avt', used=avt&&!en.declined, run=running(), m=en.start?metrics(en):null, intr=en.start?interrupted(en):null;
+  const head=`
+  <div class="card">
+    <div class="row" style="justify-content:space-between"><span class="item id" style="flex:0 1 auto;padding:0;border:0">${esc(en.id)} · ${esc(en.clinician)}</span>
+      <span style="flex:0 0 auto"><span class="pill ${en.arm}">${avt?(en.declined?'AVT declined':'AVT'):'Baseline'}</span>${en.practice?' <span class="pill practice">Practice</span>':''}</span></div>
+    <div class="clock" id="clock">${en.start?fmt(m.consult):'0:00'}</div>
+    <div class="now">${!en.start?'Tap start when the consultation begins':intr?'Interrupted. All timers are paused':en.patientLeft?'Consultation ended. Finish when the note is done':'Consultation running'}</div>
+  </div>`;
+  if(!en.start)return head+`<button class="primary tall" data-do="start">Start consultation</button><button data-do="abandon">Cancel this encounter</button>`+heldList();
+  const tb=(k,g)=>`<button class="act${run===k?' on':''}" data-g="${g}" data-do="toggle" data-k="${k}" ${intr?'disabled':''}><span>${LABEL[k]}</span><b id="tm_${k}">${fmt(k==='doc'?m.doc:m.setup)}</b><small>${intr?(intr.resume===k?'Paused. Resumes after the interruption':'Paused'):run===k?'Running. Tap to stop':'Stopped. Tap to start'}</small></button>`;
+  return head+`
+  <div class="acts${used?'':' one'}">${used?tb('setup','avt'):''}${tb('doc','doc')}</div>
+  ${en.declined?`<div class="banner">Patient declined AVT. Carry on and time documentation as normal.${m.setup?' Set-up time already recorded ('+fmt(m.setup)+') is kept.':''}</div>`:''}
+  <button class="interrupt${intr?' on':''}" data-do="interrupt">${intr?'Interruption running <b id="tm_int">'+fmt((Date.now()-intr.s)/1000)+'</b>. Tap when the clinician returns':'Interruption (pauses all timers)'+(m.intN?' · '+m.intN+' so far, '+fmt(m.intS):'')}</button>
+  <p class="muted">${used?'AVT set-up: logging in and linking the patient. ':''}Documentation: writing or dictating the note or letter${used?', and waiting for, checking, editing and transferring the AVT output':''}. Interruption: a colleague asking for advice, or the clinician called away, about anything other than this patient.</p>
+  <div class="row">
+    <button data-do="left" ${en.patientLeft||intr?'disabled':''}>${en.patientLeft?'Consultation ended at '+fmt(m.consult):'Consultation ended (patient left)'}</button>
+    <button data-do="undo" ${undoStack.length?'':'disabled'}>Undo last tap</button>
+  </div>
+  <button data-do="psurvey">${en.psurvey?'Patient survey (answers saved)':'Patient survey'}</button>
+  ${used?`<button data-do="decline" ${intr?'disabled':''}>Patient declined AVT</button>`:''}
+  <button class="hold" data-do="hold" ${intr?'disabled':''}>Patient out for tests: pause and see next patient${m.holdN?' · paused '+m.holdN+'×, '+fmt(m.holdS):''}</button>
+  <button class="primary" data-do="end">${armed==='end'?'Tap again to finish':'Note finished'}</button>
+  ${heldList()}`;
+}
+function vOutcome(){
+  const en=S.active, o=en.outcome, m=metrics(en), avt=en.arm==='avt', used=avt&&!en.declined;
+  const errs=en.errors.map((x,i)=>`<div class="item"><div><b>${esc(x.type)}</b><br><span class="muted">${x.significant==='Yes'?'Clinically significant':'Not clinically significant'} · ${x.caught==='Yes'?'caught before filing':'not caught before filing'}${x.desc?' · '+esc(x.desc):''}</span></div><button class="small" data-do="rmErr" data-i="${i}">Remove</button></div>`).join('');
+  return `
+  <h1>Finish ${esc(en.id)}</h1>
+  <div class="tiles">
+    <div class="tile"><b>${fmt(m.doc)}</b><span>Documentation</span></div>
+    <div class="tile"><b>${avt?fmt(m.setup):fmt(m.intS)}</b><span>${avt?'AVT set-up':'Interruptions ('+m.intN+')'}</span></div>
+    <div class="tile"><b>${fmt(m.consult)}</b><span>Consultation</span></div>
+  </div>
+  <div class="card" id="oform">
+    ${en.practice?'':`<label>Patient hospital number (check it is correct)<input id="o_hosp" value="${esc(en.hospitalNo||'')}" autocomplete="off" autocapitalize="characters"></label>`}
+    <label>Was the note or letter finished in this encounter?${sel('o_note',['Finished','Deferred to later','Not observed'],o.noteStatus)}</label>
+    ${en.declined?'<div class="banner">Patient declined AVT. This is saved as an AVT-arm encounter completed without AVT.</div>':''}
+    ${used?`
+    <div class="row">
+      <label>Patient consent to recording${sel('o_consent',['Accepted','Not asked'],o.consent)}</label>
+      <label>Technical problem${sel('o_tech',['None','Recording failed','Output failed or unusable','Fell back to manual note'],o.tech)}</label>
+    </div>
+    <label>Times the output was regenerated<input id="o_regen" type="number" min="0" inputmode="numeric" value="${esc(o.regen)}"></label>
+    <h2>Errors in the AVT output</h2>
+    <p class="muted">Ask the clinician: was anything in the output wrong, made up or missing? Describe without patient identifiers.</p>
+    <div class="list">${errs||'<p class="muted">None recorded.</p>'}</div>
+    <div class="row">
+      <label>Type${sel('e_type',ERR_TYPES,ERR_TYPES[0])}</label>
+      <label>Clinically significant${sel('e_sig',['No','Yes'],'No')}</label>
+      <label>Caught before filing${sel('e_caught',['Yes','No'],'Yes')}</label>
+    </div>
+    <label>What was wrong<input id="e_desc" placeholder="e.g. invented an IOP that was never measured"></label>
+    <button data-do="addErr">Add this error</button>`:''}
+    <label>Patient survey offered${sel('o_survey',['No','Yes'],o.survey)}</label>
+    <button data-do="psurvey">${en.psurvey?'Patient survey (answers saved)':'Patient survey'}</button>
+    <label>Observer notes (no patient identifiers)<textarea id="o_notes">${esc(o.notes)}</textarea></label>
+    <button class="primary" data-do="saveEnc">Save encounter</button>
+    <button class="danger" data-do="discard">${armed==='discard'?'Tap again to discard':'Discard this encounter'}</button>
+  </div>`;
+}
+function vSurvey(){
+  const L=S.last||{};
+  const tlx=TLX.map((t,i)=>`<div class="q"><b>${t[0]}</b><span class="muted">${t[1]}</span><input type="range" id="t${i}" min="0" max="100" step="5" value="50" data-touched="0"><div class="ends"><span>${t[2]}</span><span id="tv${i}">not set</span><span>${t[3]}</span></div></div>`).join('');
+  const sus=SUS.map((q,i)=>`<div class="q"><span>${i+1}. ${q}</span><div class="likert">${[1,2,3,4,5].map(v=>`<label><input type="radio" name="sus${i}" value="${v}">${v}</label>`).join('')}</div>${i===0?'<div class="ends"><span>Strongly disagree</span><span>Strongly agree</span></div>':''}</div>`).join('');
+  return `
+  <h1>Clinician questionnaire</h1>
+  <p class="muted">Hand the device to the clinician at the end of the observed session. It takes about two minutes.</p>
+  <div class="card">
+    <div class="row">
+      <label>Clinician name<input id="q_clin" list="clinlist" value="${esc(L.clinician||'')}" autocapitalize="words">${clinList()}</label>
+      <label>Session arm${sel('q_arm',['Baseline (no AVT)','AVT'],L.arm==='avt'?'AVT':'Baseline (no AVT)')}</label>
+      <label>Setting${sel('q_setting',['ED','Clinic'],L.setting||'ED')}</label>
+    </div>
+  </div>
+  <div class="card"><h2>Documentation workload (NASA-TLX)</h2>
+    <p class="muted">Thinking only about the documentation you did in the session just observed. Move every slider.</p>${tlx}</div>
+  <div class="card" id="susCard"${L.arm==='avt'?'':' hidden'}><h2>Usability of the AVT tool (SUS)</h2>
+    <p class="muted">1 is strongly disagree, 5 is strongly agree.</p>${sus}</div>
+  <p class="msg err" id="q_err"></p>
+  <button class="primary" data-do="saveSurvey">Save questionnaire</button>
+  <button data-do="home">Cancel</button>`;
+}
+const PQ=['The clinician gave me their full attention.','The clinician listened carefully to what I had to say.','The clinician explained things in a way I could understand.','The clinician spent too much time looking at the computer screen.'];
+const PQA=['I was comfortable with the AI voice tool being used during my consultation.','It was clearly explained to me how the AI voice tool would be used.','I would be happy for the AI voice tool to be used at my future appointments.'];
+const AGREE=['Strongly disagree','Disagree','Neutral','Agree','Strongly agree'], RATE=['Very poor','Poor','Fair','Good','Excellent'];
+let psBack='timer';
+const avtUsed=en=>en.arm==='avt'&&!en.declined;
+function surveyUrl(en){const st=S.settings,u=(avtUsed(en)?st.surveyAvt:st.surveyBase)||'';return /^https?:\/\//i.test(u)?u.split('ENCOUNTER').join(encodeURIComponent(en.id)):''}
+function drawQR(){const q=$('qr'); if(q&&window.QRCode){try{new QRCode(q,{text:q.dataset.url,width:240,height:240,correctLevel:QRCode.CorrectLevel.L})}catch(e){q.textContent='The QR code could not be drawn. Use the survey on this device instead.'}}}
+function vPSurvey(){
+  const en=S.active, used=avtUsed(en), p=en.psurvey, pa=p&&p.avt||[], url=surveyUrl(en);
+  const opts=(name,labels,val)=>`<div class="opts">${labels.map((t,i)=>`<label><input type="radio" name="${name}" value="${i+1}"${val===i+1?' checked':''}><span>${t}</span></label>`).join('')}</div>`;
+  let n=0; const q=(text,name,labels,val)=>`<div class="q pq"><b>${++n}. ${text}</b>${opts(name,labels,val)}</div>`;
+  return `
+  <div class="card staff"><h2>For staff</h2>
+    <p class="muted">${esc(en.id)} · ${used?'AVT version':'Standard version'}. Any running timer keeps running.</p>
+    <label>Who is answering${sel('ps_mode',['Patient on this device','Read aloud by staff'],p?p.mode:'Patient on this device')}</label>
+    ${url?`<p class="muted">Or the patient can scan this code and answer on their own phone. Those answers go to your site's own survey, not this recorder's spreadsheet.</p><div class="qr" id="qr" data-url="${esc(url)}"></div><button data-do="psQR">Patient is using the QR code. Go back</button>`:''}
+    <button data-do="psBack">Cancel and go back</button>
+  </div>
+  <h1>Your consultation today</h1>
+  <p>${used?'During your consultation the clinician used an AI voice tool, which listens to the conversation and helps write the notes. ':''}This short survey takes about one minute. We do not ask for your name, and your answers will not affect your care.</p>
+  <div class="card">
+    ${PQ.map((t,i)=>q(t,'pq'+i,AGREE,p?p.q[i]:null)).join('')}
+    ${q('Overall, how would you rate this consultation?','pq4',RATE,p?p.q[4]:null)}
+    ${used?PQA.map((t,i)=>q(t,'pqa'+i,AGREE,pa[i]==null?null:pa[i])).join(''):''}
+    <div class="q pq"><label><b>${n+1}. Is there anything else you would like to tell us? (optional)</b><span class="muted">Please do not include your name or other personal details.</span><textarea id="ps_comment">${esc(p&&p.comment||'')}</textarea></label></div>
+    <p class="msg err" id="ps_err"></p>
+    <button class="primary tall" data-do="savePS">Submit answers</button>
+  </div>`;
+}
+function vPSDone(){
+  return `<div class="card" style="text-align:center;padding:40px 16px"><h1>Thank you</h1><p>Your answers have been saved. Please hand the device back to the member of staff.</p></div>
+  <button data-do="psBack">Staff: return to the ${psBack==='outcome'?'end form':'timer'}</button>`;
+}
+
+/* ---------- actions ---------- */
+function collectOutcome(){
+  const en=S.active; if(!en||!$('o_note'))return; const o=en.outcome;
+  if($('o_hosp'))en.hospitalNo=$('o_hosp').value.trim();
+  o.noteStatus=$('o_note').value; o.survey=$('o_survey').value; o.notes=$('o_notes').value;
+  if($('o_consent')){o.consent=$('o_consent').value;o.tech=$('o_tech').value;o.regen=$('o_regen').value}
+  save();
+}
+let undoStack=[];
+function park(en){
+  const now=Date.now(), c=en.segs.length?en.segs[en.segs.length-1]:null, it=interrupted(en);
+  if(c&&!c.e)c.e=now; if(it)it.e=now;
+  en.holds=en.holds||[]; en.holds.push({s:now,e:null}); S.held.push(en);
+}
+function snap(){undoStack.push(JSON.stringify(S.active));if(undoStack.length>40)undoStack.shift()}
+const DO={
+  home(){view='home'},
+  new(){view='setup'},
+  survey(){view='survey'},
+  begin(){
+    const clin=cleanName($('f_clin').value), obs=$('f_obs').value.trim().toUpperCase();
+    if(!clin||!obs){$('f_err').textContent='Enter the clinician name and your initials.';return false}
+    const hosp=$('f_hosp').value.trim(), practice=$('f_practice').value!=='Real data';
+    if(!hosp&&!practice){$('f_err').textContent='Enter the patient hospital number before starting.';return false}
+    const arm=$('f_arm').value==='AVT'?'avt':'baseline', d=new Date();
+    S.seq++; S.settings.observer=obs;
+    const id=(arm==='avt'?'A':'B')+'-'+String(d.getFullYear()).slice(2)+pad(d.getMonth()+1)+pad(d.getDate())+'-'+obs+'-'+String(S.seq).padStart(3,'0');
+    S.active={id,arm,practice:$('f_practice').value!=='Real data',setting:$('f_setting').value,clinic:$('f_clinic').value.trim(),
+      observer:obs,clinician:clin,grade:$('f_grade').value,visit:$('f_visit').value,interpreter:$('f_interp').value,companion:$('f_comp').value,
+      prior:$('f_prior').value,pairedId:$('f_pair').value.trim(),hospitalNo:hosp,start:null,patientLeft:null,end:null,segs:[],errors:[],
+      outcome:{noteStatus:'Finished',consent:'Accepted',tech:'None',regen:'0',survey:'No',notes:''}};
+    S.last={arm,setting:S.active.setting,clinic:S.active.clinic,clinician:clin,grade:S.active.grade,prior:S.active.prior};
+    undoStack=[];view='timer';
+  },
+  abandon(){S.active=null;view='home'},
+  hold(){
+    park(S.active); S.active=null; undoStack=[]; armed=null; view='setup';
+    flash={ok:1,t:'Patient paused. Set up the next patient, or tap Resume when they return.'};
+  },
+  resume(el){
+    const i=S.held.findIndex(e=>e.id===el.dataset.id); if(i<0)return;
+    const en=S.held.splice(i,1)[0], now=Date.now();
+    if(S.active&&S.active.start&&!S.active.end)park(S.active);
+    const x=en.holds[en.holds.length-1]; if(x&&!x.e)x.e=now;
+    S.active=en; undoStack=[]; view='timer';
+  },
+  start(){snap();S.active.start=Date.now()},
+  toggle(el){
+    snap(); const en=S.active, now=Date.now(), c=cur(), k=el.dataset.k, was=c&&!c.e?c.a:null;
+    if(was)c.e=now;
+    if(was!==k)en.segs.push({a:k,s:now,e:null});
+  },
+  interrupt(){
+    snap(); const en=S.active, now=Date.now(), cur_=interrupted(en); en.ints=en.ints||[];
+    if(cur_){cur_.e=now; if(cur_.resume)en.segs.push({a:cur_.resume,s:now,e:null})}
+    else{const c=cur(), was=c&&!c.e?c.a:null; if(was)c.e=now; en.ints.push({s:now,e:null,resume:was})}
+  },
+  left(){snap();S.active.patientLeft=Date.now()},
+  decline(){snap();const en=S.active,now=Date.now(),c=cur();if(c&&!c.e&&c.a==='setup')c.e=now;en.declined=now;en.outcome.consent='Declined'},
+  undo(){if(undoStack.length)S.active=JSON.parse(undoStack.pop())},
+  end(){
+    if(armed!=='end'){armed='end';return 'keep'}
+    const en=S.active, now=Date.now(), c=cur(), it=interrupted(en); if(c&&!c.e)c.e=now; if(it)it.e=now; en.end=now; undoStack=[]; view='outcome';
+  },
+  psurvey(){if(view==='outcome')collectOutcome();psBack=view;S.active.outcome.survey='Yes';view='psurvey'},
+  psBack(){view=psBack},
+  psQR(){S.active.outcome.survey='Yes';S.active.outcome.surveyRoute='QR code';view=psBack},
+  savePS(){
+    const g=n=>{const c=document.querySelector('input[name='+n+']:checked');return c?+c.value:null}, used=avtUsed(S.active);
+    const q=[0,1,2,3,4].map(i=>g('pq'+i)), avt=used?PQA.map((_,i)=>g('pqa'+i)):null;
+    if(q.some(v=>v==null)||(avt&&avt.some(v=>v==null))){$('ps_err').textContent='Please answer every question before submitting.';return false}
+    const mode=$('ps_mode').value;
+    S.active.outcome.survey='Yes';S.active.psurvey={at:new Date().toISOString(),version:used?'AVT':'Standard',mode,q,avt,comment:$('ps_comment').value.trim()};
+    view=mode==='Patient on this device'?'psdone':psBack;
+  },
+  addErr(){collectOutcome();S.active.errors.push({type:$('e_type').value,significant:$('e_sig').value,caught:$('e_caught').value,desc:$('e_desc').value.trim()})},
+  rmErr(el){collectOutcome();S.active.errors.splice(+el.dataset.i,1)},
+  saveEnc(){collectOutcome();if(!S.active.practice&&!S.active.hospitalNo){const o=$('o_hosp');if(o){o.focus();o.placeholder='Required: enter the hospital number'};return false}S.encounters.push(S.active);const id=S.active.id;S.active=null;view='home';flash={ok:1,t:id+' saved.'}},
+  discard(){if(armed!=='discard'){collectOutcome();armed='discard';return 'keep'}S.active=null;view='home'},
+  del(el){const id=el.dataset.id; if(armed!=='del'+id){armed='del'+id;return 'keep'}S.encounters=S.encounters.filter(e=>e.id!==id)},
+  wipe(){if(armed!=='wipe'){armed='wipe';return 'keep'}S.encounters=[];S.surveys=[];S.held=[];S.seq=0;S.last={};flash={ok:1,t:'All data deleted from this device.'}},
+  saveSettings(){const st=S.settings;st.observer=$('s_obs').value.trim().toUpperCase();st.surveyBase=$('s_qb').value.trim();st.surveyAvt=$('s_qa').value.trim();flash={ok:1,t:'Settings saved.'}},
+  copyBackup(){
+    const t=JSON.stringify({encounters:S.encounters,surveys:S.surveys});
+    try{navigator.clipboard.writeText(t).then(()=>{flash={ok:1,t:'Backup copied. Paste it somewhere safe.'};render()},()=>{flash={ok:0,t:'The clipboard was blocked. Save the spreadsheet instead.'};render()})}catch(e){flash={ok:0,t:'The clipboard was blocked. Save the spreadsheet instead.'}}
+  },
+  restore(){
+    try{const p=JSON.parse($('s_restore').value);const ids=new Set(S.encounters.map(e=>e.id));let n=0;
+      (p.encounters||[]).forEach(e=>{if(e&&e.id&&e.segs&&!ids.has(e.id)){S.encounters.push(e);n++}});
+      const sk=new Set(S.surveys.map(s=>s.at));(p.surveys||[]).forEach(s=>{if(s&&s.at&&!sk.has(s.at))S.surveys.push(s)});
+      flash={ok:1,t:n+' encounter'+(n===1?'':'s')+' added from the backup.'};
+    }catch(e){flash={ok:0,t:'That text is not a backup from this app. Paste the whole backup and try again.'}}
+  },
+  saveSurvey(){
+    const clin=cleanName($('q_clin').value), arm=$('q_arm').value==='AVT'?'avt':'baseline';
+    const t=TLX.map((_,i)=>$('t'+i));
+    if(!clin||t.some(x=>x.dataset.touched!=='1')){$('q_err').textContent='Enter the clinician name and move all six workload sliders.';return false}
+    const tl=t.map(x=>+x.value), sus=SUS.map((_,i)=>{const c=document.querySelector('input[name=sus'+i+']:checked');return c?+c.value:null});
+    const isAvt=arm==='avt', susDone=isAvt&&sus.every(v=>v!=null);
+    if(isAvt&&!susDone){$('q_err').textContent='Answer all ten usability questions.';return false}
+    S.surveys.push({at:new Date().toISOString(),clinician:clin,arm,setting:$('q_setting').value,observer:S.settings.observer,tlx:tl,tlxRaw:r1(tl.reduce((a,b)=>a+b,0)/6),
+      sus:susDone?sus:null,susScore:susDone?sus.reduce((a,v,i)=>a+(i%2===0?v-1:5-v),0)*2.5:null});
+    view='home';flash={ok:1,t:'Questionnaire saved for '+clin+'.'};
+  },
+  export(){doExport();return 'none'}
+};
+document.addEventListener('click',ev=>{
+  const el=ev.target.closest('[data-do]'); if(!el)return;
+  const name=el.dataset.do; if(name!=='copyBackup'&&name!=='export')flash=(view==='home'&&['del','wipe'].includes(name))?flash:null;
+  const r=DO[name](el);
+  if(r===false||r==='none')return;
+  if(r!=='keep')armed=null;
+  save();render();
+});
+document.addEventListener('input',ev=>{
+  const t=ev.target; if(t.type==='range'&&t.id[0]==='t'){t.dataset.touched='1';$('tv'+t.id.slice(1)).textContent=t.value}
+});
+document.addEventListener('change',ev=>{
+  if(view==='outcome')collectOutcome();
+  if(ev.target.id==='q_arm'){$('susCard').hidden=ev.target.value!=='AVT';$('q_err').textContent=''}
+});
+setInterval(()=>{
+  if(view!=='timer'||!S.active||!S.active.start)return;
+  const m=metrics(S.active), set=(id,v)=>{const x=$(id);if(x)x.textContent=fmt(v)};
+  set('clock',m.consult); set('tm_doc',m.doc); set('tm_setup',m.setup); const it=interrupted(S.active); if(it)set('tm_int',(Date.now()-it.s)/1000);
+},500);
+
+/* ---------- export ---------- */
+const DICT=[
+ ['encounter_id','Study ID. B = baseline, A = AVT, then date (YYMMDD), observer, running number. Use this ID on the linkage log and letter audit.'],
+ ['arm / avt_used / consent','arm is the arm the encounter was started in. If the patient declined AVT, arm stays "avt", avt_used is "No" and consent is "Declined". Analyse by arm (as allocated) or by avt_used (as treated); the decline rate is the share of AVT-arm rows with consent "Declined".'],
+ ['Patient_linkage sheet','Hospital number against encounter ID, the only place patient identifiers appear. For the person retrieving notes and letters only. Delete this sheet before sharing the workbook with raters or analysts.'],
+ ['patient_survey_route','How the patient survey was done: on this device, read aloud by staff, or by QR code to the site\'s own online survey (those answers are not in this workbook).'],
+ ['Patient_surveys sheet','Patient survey answers collected in this app, one row per encounter. Agreement items: 1 = strongly disagree to 5 = strongly agree (too_much_screen_time is reverse-worded: lower is better). overall_rating: 1 = very poor to 5 = excellent. The three AI tool items are asked only when AVT was used. administered says whether the patient answered on the device or staff read the questions aloud.'],
+ ['consultation_s','Consultation start to "consultation ended (patient left)", in seconds, minus any interruptions and pauses in that period. If "patient left" was not tapped, start to "note finished".'],
+ ['paused_count / paused_s','Number and total length of times the encounter was paused because the patient left for tests and another patient was seen. All timers stop while paused, so this time is excluded from consultation_s and net_elapsed_s.'],
+ ['interruption_count / interruption_s','Number and total length of interruptions logged with the Interruption button (colleague asking for advice, clinician called away). All timers are paused during them, so this time is in no other duration except total_elapsed_s.'],
+ ['documentation_s','Total time the documentation timer was running. Interruptions are excluded because the timer is stopped for them.'],
+ ['avt_setup_s','AVT arm only. Total time the AVT set-up timer was running (logging in, linking the patient).'],
+ ['documentation_incl_setup_s','documentation_s + avt_setup_s. Suggested primary outcome for baseline versus AVT.'],
+ ['doc_during_consultation_s / doc_after_consultation_s','documentation_s split by whether the patient was still in the room.'],
+ ['doc_pct_of_consultation','doc_during_consultation_s as a percentage of consultation_s.'],
+ ['documentation_pauses','Number of times documentation was stopped and restarted for reasons other than a logged interruption, such as returning to the patient.'],
+ ['total_elapsed_s / net_elapsed_s','Consultation start to "note finished", including interruptions and pauses; and the same with both removed.'],
+ ['note_status','Whether the note or letter was finished within the observed encounter.'],
+ ['error_count / hallucination_count / clinically_significant_errors','AVT output errors reported by the clinician for this encounter. Details are on the Output_errors sheet.'],
+ ['tlx_raw','Raw NASA-TLX: mean of the six subscales, 0 to 100, higher is worse. Performance is scored 0 = perfect, 100 = failure.'],
+ ['sus_score','System Usability Scale, 0 to 100. Above 68 is conventionally above average.'],
+ ['Events sheet','One row per run of the documentation or set-up timer, with start and end times, for re-analysis and inter-rater agreement.']
+];
+function buildBook(){
+  const real=S.encounters.filter(e=>!e.practice), R=x=>Math.round(x);
+  const enc=real.map(e=>{const m=metrics(e),d=new Date(e.start);return {
+    encounter_id:e.id,date:d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()),start_time:pad(d.getHours())+':'+pad(d.getMinutes()),
+    arm:e.arm,avt_used:e.arm==='avt'&&!e.declined?'Yes':'No',setting:e.setting,clinic:e.clinic,observer:e.observer,clinician:e.clinician,grade:e.grade,visit_type:e.visit,
+    interpreter:e.interpreter,companion:e.companion,prior_avt_consultations:e.prior,paired_observation_id:e.pairedId,
+    consultation_s:R(m.consult),documentation_s:R(m.doc),avt_setup_s:e.arm==='avt'?R(m.setup):'',documentation_incl_setup_s:R(m.docIncl),
+    doc_during_consultation_s:R(m.docPre),doc_after_consultation_s:R(m.docPost),doc_pct_of_consultation:r1(m.docPct),documentation_pauses:m.pauses,interruption_count:m.intN,interruption_s:R(m.intS),paused_count:m.holdN,paused_s:R(m.holdS),
+    total_elapsed_s:R(m.total),net_elapsed_s:R(m.net),patient_left_marked:e.patientLeft?'Yes':'No',note_status:e.outcome.noteStatus,
+    consent:e.arm==='avt'?e.outcome.consent:'',technical_problem:e.arm==='avt'&&!e.declined?e.outcome.tech:'',regenerations:e.arm==='avt'&&!e.declined?+e.outcome.regen||0:'',
+    error_count:e.errors.length,hallucination_count:e.errors.filter(x=>x.type.startsWith('Hallucination')).length,
+    clinically_significant_errors:e.errors.filter(x=>x.significant==='Yes').length,patient_survey_offered:e.outcome.survey,patient_survey_route:e.psurvey?e.psurvey.mode:(e.outcome.surveyRoute||''),hospital_number_recorded:e.hospitalNo?'Yes':'No',notes:e.outcome.notes}});
+  const ev=[];real.forEach(e=>e.segs.concat((e.ints||[]).map(x=>({a:'interrupt',s:x.s,e:x.e})),(e.holds||[]).map(x=>({a:'hold',s:x.s,e:x.e}))).sort((a,b)=>a.s-b.s).forEach((g,i)=>ev.push({encounter_id:e.id,arm:e.arm,seq:i+1,activity:LABEL[g.a]||g.a,
+    start:new Date(g.s).toISOString(),end:new Date(g.e).toISOString(),duration_s:r1((g.e-g.s)/1000),
+    patient_present:e.patientLeft?(g.s<e.patientLeft?'Yes':'No'):'Not marked'})));
+  const er=[];real.forEach(e=>e.errors.forEach((x,i)=>er.push({encounter_id:e.id,clinician:e.clinician,setting:e.setting,n:i+1,type:x.type,clinically_significant:x.significant,caught_before_filing:x.caught,description:x.desc})));
+  const lk=real.filter(e=>e.hospitalNo).map(e=>{const d=new Date(e.start);return {encounter_id:e.id,hospital_number:String(e.hospitalNo),
+    date:d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()),clinician:e.clinician,setting:e.setting,clinic:e.clinic,arm:e.arm,avt_used:e.arm==='avt'&&!e.declined?'Yes':'No'}});
+  const ps=real.filter(e=>e.psurvey).map(e=>{const s=e.psurvey,a=s.avt||[],v=x=>x==null?'':x;return {encounter_id:e.id,arm:e.arm,avt_used:avtUsed(e)?'Yes':'No',clinician:e.clinician,completed_at:s.at,
+    survey_version:s.version||'',administered:s.mode||'Read aloud by staff',full_attention:s.q[0],listened:s.q[1],explained_clearly:s.q[2],too_much_screen_time:s.q[3],overall_rating:s.q[4],
+    comfortable_with_ai_tool:v(a[0]),ai_tool_explained:v(a[1]),happy_for_future_use:v(a[2]),comment:s.comment||''}});
+  const sv=S.surveys.map(s=>{const o={completed_at:s.at,clinician:s.clinician,arm:s.arm,setting:s.setting,observer:s.observer};
+    TLX.forEach((t,i)=>o['tlx_'+t[0].toLowerCase().replace(' ','_')]=s.tlx[i]);o.tlx_raw=s.tlxRaw;
+    SUS.forEach((_,i)=>o['sus_q'+(i+1)]=s.sus?s.sus[i]:'');o.sus_score=s.susScore==null?'':s.susScore;return o});
+  const wb=XLSX.utils.book_new(), add=(rows,name,empty)=>XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows.length?rows:[empty]),name);
+  add(enc,'Encounters',{encounter_id:'no encounters recorded'});
+  add(ev,'Events',{encounter_id:'no events recorded'});
+  add(er,'Output_errors',{encounter_id:'no errors recorded'});
+  add(sv,'Clinician_surveys',{completed_at:'no questionnaires recorded'});
+  add(ps,'Patient_surveys',{encounter_id:'no patient surveys recorded'});
+  add(lk,'Patient_linkage',{encounter_id:'no hospital numbers recorded'});
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['Column','Definition']].concat(DICT)),'Data_dictionary');
+  return wb;
+}
+async function doExport(){
+  const say=(ok,t)=>{flash={ok,t};render()};
+  if(!window.XLSX)return say(0,'The spreadsheet library did not load. Reconnect to the internet, reload the page and try again. Your data is still on this device.');
+  const d=new Date(), name='AVT_time_motion_'+d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+'_'+pad(d.getHours())+pad(d.getMinutes())+'.xlsx';
+  let blob;
+  try{blob=new Blob([XLSX.write(buildBook(),{bookType:'xlsx',type:'array'})],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})}
+  catch(e){return say(0,'The spreadsheet could not be built. Use "Copy a full backup" under Settings so nothing is lost.')}
+  if(!window.claude){
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),10000);
+    return say(1,'Spreadsheet downloaded as '+name+'. Look in this device\'s Downloads folder.');
+  }
+  if(!dl){try{dl=await window.claude.use('downloads')}catch(e){}}
+  if(!dl)return say(0,'Saving files is not available in this view. Open the page in claude.ai, or use "Copy a full backup" under Settings.');
+  try{await dl.save({filename:name,data:blob}); say(1,'Spreadsheet saved as '+name+'.')}
+  catch(e){say(0,e&&e.code==='declined'?'Save cancelled. Nothing was exported.':'The spreadsheet could not be saved here. Use "Copy a full backup" under Settings and try again later.')}
+}
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "AVT Time and Motion Recorder"
+abstract: >-
+  An offline web app for observers running time and motion studies of
+  ambient voice technology (AVT) in clinical consultations. It times
+  documentation and AVT set-up, logs interruptions, paused patients and AVT
+  output errors, collects clinician workload (NASA-TLX), usability (SUS) and
+  patient survey responses, and exports the data as an Excel workbook.
+  Developed for the Moorfields Eye Hospital AVT pilot as part of the NHS
+  Fellowship in Clinical AI.
+authors:
+  - family-names: Mushtaq
+    given-names: Jameel
+    affiliation: "Moorfields Eye Hospital NHS Foundation Trust, London, UK"
+version: "1.4"
+date-released: "2026-11-19"
+license: MIT
+repository-code: "https://github.com/jameelmushtaq/voxtor-time-motion"
+url: "https://voxtor.netlify.app"
+keywords:
+  - ambient voice technology
+  - AI scribe
+  - time and motion study
+  - clinical documentation
+  - ophthalmology
+  - NHS
